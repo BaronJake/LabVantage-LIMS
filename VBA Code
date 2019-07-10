@@ -1,0 +1,241 @@
+Sub openLIMS()
+    Dim ie As Object
+    Dim div As Object
+    
+    'acquiresLIMS username and password.
+    'Add masking for password later
+    usr = InputBox("Please Enter Your LIMS Username", "Username Entry")
+    If usr = "" Then
+        Exit Sub
+    End If
+
+    ' Needs custom userform called UserForm1 in order to mask password entry
+'    pswd = InputBox("Password")
+    pswd = getPassword
+    If pswd = "" Then
+        Exit Sub
+    End If
+        
+    'Creates new IE object.
+    'Needs to be medium because of integrity level
+    Set ie = New InternetExplorerMedium
+    ie.Visible = True
+    
+    'Navigates to LIMS
+    'Note this method logs into product test data environment
+    ie.Navigate "HTML for LIMS goes here"
+    Application.StatusBar = "LIMS is loading. I appreciate your human patience"
+    Call Wait(ie)
+    
+    'Enters user info into the login box and selects Product Test Data environment
+    'Clicks log in button
+    'Application needs to wait for LIMS to load, can take a while...
+    With ie.Document
+        .getElementById("databaseusername").Value = usr
+        .getElementById("databasepassword").Value = pswd
+        .getElementById("selectdatabase").selectedindex = 3
+        .getElementById("submitlogin").Click
+    End With
+    
+    'Needs to be called twice
+    'once for page to load
+    'second for javascript to load
+    Call Wait(ie)
+    Call Wait(ie)
+   
+   'Clicks Add Batch from the top menu
+   ie.Document.getElementById("topmenu_AddBatch_Batch").Click
+   Call Wait(ie)
+    
+   'Calls a function to loop through product numbers on sheet
+    Call prodList
+End Sub
+
+Private Function FindIEObject(target As String) As InternetExplorerMedium
+    
+    'Opens the Windows shell to get a list of open windows
+    'Then puts them into a list
+    Set objShell = CreateObject("Shell.Application")
+    IE_count = objShell.Windows.Count
+    
+    'Loops through all open windows for one that matched target string approximately
+    'Then returns that window as an object to be used in other functions
+    For x = 0 To (IE_count - 1)
+        On Error Resume Next
+        my_title = objShell.Windows(x).Document.Title
+        If my_title Like target Then
+            Set FindIEObject = objShell.Windows(x)
+            Exit For
+        End If
+    Next
+End Function
+
+Sub FillIn(Product As String, bName As String, Level As String, bSize As String, unitInd As Integer, Expiry As String, Lot As String)
+    Dim ie As InternetExplorerMedium
+    Dim prod As InternetExplorerMedium
+    Dim pvar As InternetExplorerMedium
+    
+    'Creates an internet explorer medium object from the Add Batch Window
+    Set ie = FindIEObject("Add Batch")
+   
+    'Declares an object based on two levels of iframes in HTML document
+    Set Frame = ie.Document.getElementById("_nav_frame1").contentWindow.Document.getElementById("maint_iframe").contentWindow
+    
+    'Selects Raw Material from the template list, and refreshes the page based on the template
+    With Frame.Document
+        .getElementById("template").selectedindex = 1
+        .getElementById("template").FireEvent ("onchange")
+    End With
+    Call Wait(ie)
+    
+    'Inputs the batch name, size and expiration date from excel sheet
+    With Frame.Document
+        .getElementById("pr0_u_baxterbatchid").Value = bName
+        .getElementById("pr0_batchsize").Value = bSize
+        .getElementById("pr0_batchsizeunits").selectedindex = unitInd
+        .getElementById("pr0_expirydt").Value = Expiry
+        .getElementById("pr0_prodvariantlotreference").Value = Lot
+    End With
+    
+    'Clicks on Product SDC button to bring up the Product Selection Window
+    Frame.Document.getElementById("pr0_productid_img").Click
+    Call Wait(ie)
+    Call Wait(ie)
+    Call Wait(ie)
+    Application.Wait (Now + TimeValue("00:00:05"))
+    
+    'Sets a new InternetExplorerMedium object for the Select Product window
+    Set prod = FindIEObject("Select Product")
+    Call Wait(prod)
+    Call Wait(prod)
+    Call Wait(prod)
+    Application.Wait (Now + TimeValue("00:00:03"))
+    
+    'enters the product number from the excel sheet into search bar and clicks search
+    'Then clicks select&return
+    With prod.Document
+        .getElementsByClassName("gwt-TextBox topsearch_textsearch_field")(0).Value = Product
+        .getElementsByClassName("search_lookup_img")(0).Click
+    End With
+    
+    Call Wait(prod)
+    prod.Document.getElementById("SelectReturn").Click
+    Call Wait(ie)
+    Call Wait(ie)
+    
+    'Clicks on Product variant SDc button to open product variant window
+    Frame.Document.getElementById("pr0_prodvariantid_img").Click
+    Call Wait(ie)
+    Call Wait(ie)
+    
+    'Creates a new Internet Explorer Medium Object for the Select product Variant Window
+    Set pvar = FindIEObject("Select Product Variant")
+    Call Wait(pvar)
+    Call Wait(pvar)
+    Call Wait(pvar)
+    Call Wait(pvar)
+        
+'   Clicks First option and clicks Select and Return
+    With pvar.Document
+'            .getElementById("list_iframe").contentWindow.Document.getElementsByName("selector")(0).Click
+'            .getElementById("list_iframe").contentWindow.Document.getElementsByName("selector")(0).FireEvent ("onclick")
+            .getElementById("SelectReturn").Click
+    End With
+    End If
+    Call Wait(ie)
+    
+    'Clicks save on the batch
+    ie.Document.getElementById("_nav_frame1").contentWindow.Document.getElementById("Save").Click
+    Call Wait(ie)
+    Call Wait(ie)
+    Call Wait(ie)
+    
+    'Clicks Add Batch from the top menu
+    ie.Document.getElementById("topmenu_AddBatch_Batch").Click
+    Call Wait(ie)
+    Call Wait(ie)
+    Call Wait(ie)
+    Application.Wait (Now + TimeValue("00:00:10"))
+    
+End Sub
+
+Sub prodList()
+    Dim Product As String
+    Dim bName As String
+    Dim Level As String
+    Dim bSize As String
+    Dim unitInd As Integer
+    Dim Expiry As String
+    Dim Lot As String
+    
+    Application.ScreenUpdating = False
+    
+    'loops through excel table where
+    'product number is in col A,
+    'Batch name in col B
+    'Testing level in col C
+    'Batch size in col D
+    'Batch unit in col E
+    'Expiry Date in Col F
+    'Manufacture Lot Number in Col G
+    lRow = Cells(Rows.Count, 1).End(xlUp).Row
+    For x = 5 To lRow
+        Product = CStr(Cells(x, 1))
+        bName = CStr(Cells(x, 2))
+        Level = CStr(Cells(x, 3))
+        bSize = CStr(Cells(x, 4))
+        unit = CStr(Cells(x, 5))
+        Select Case unit
+            Case "kg"
+                unitInd = 1
+            Case "lbs"
+                unitInd = 2
+            Case "mL"
+                unitInd = 3
+            Case "Count"
+                unitInd = 4
+            Case "g"
+                unitInd = 5
+            Case "L"
+                unitInd = 6
+            Case Else
+                unitInd = 0
+        End Select
+        Expiry = CStr(Cells(x, 6))
+        Lot = CStr(Cells(x, 7))
+        
+       'If the product column isn't filled out, spits out an error
+        If Product = "" Then
+            MsgBox ("Missing Required Product Number on row " & x)
+            Exit Sub
+        End If
+        'If the batch name isn't filled out, spits out an error
+        If bName = "" Then
+            MsgBox ("Missing Required Batch Name on row " & x)
+            Exit Sub
+        End If
+        
+        'Passes values to sub that logs in samples
+        Application.StatusBar = "Creating Batch For " & Product & ". Human Patience Is A Virtue."
+        Call FillIn(Product, bName, Level, bSize, unitInd, Expiry, Lot)
+    Next
+    Application.StatusBar = "Complete"
+    MsgBox ("Batch Creation Complete. Declare Your Next Order For I Am A Humble Computing Device")
+End Sub
+
+Private Function getPassword()
+    'Brings up the user form and stores the value
+    UserForm1.Show
+    getPassword = UserForm1.TextBox1.Value
+    
+    'Clears the user form textbox for next use and closes it
+    UserForm1.TextBox1.Value = ""
+    Unload UserForm1
+End Function
+
+Sub Wait(ie As InternetExplorerMedium)
+    'Waits for internet explorer to do it's thing
+    Do
+        Application.Wait (Now + TimeValue("00:00:01"))
+    Loop While ie.ReadyState <> 4 Or ie.Busy
+End Sub
