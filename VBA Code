@@ -23,7 +23,7 @@ Sub openLIMS()
     
     'Navigates to LIMS
     'Note this method logs into product test data environment
-    ie.Navigate "HTML for LIMS goes here"
+    ie.Navigate "https://LIMS-URL.com"
     Application.StatusBar = "LIMS is loading. I appreciate your human patience"
     Call Wait(ie)
     
